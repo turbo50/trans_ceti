@@ -1,0 +1,36 @@
+
+  -- données issues du fichier "CETI_REF_COMPTEUR_AAAA_MM_JJ" de SAM et CETI
+  -- fusion préalable des fichiers sur la base du matricule
+   
+ declare cur_cpt cursor for select matricule_cpt, count(*) as nombre from compteur group by matricule_cpt;
+         rec_cpt record;
+		 rec_cpt_a_inserer record;
+	begin	 
+		 open cur_cpt;
+		 loop
+			fetch cur_cpt into rec_cpt;
+			exit when not found;
+			-- Il y'a doublons
+			if(rec_cpt.nombre > 1)then
+				-- est-ce un compteur actif?
+				select matricule_cpt, nb_de_roue_compteur, poids_impulsion, technologie_compteur, calibre into rec_cpt_a_inserer
+				from compteur where pce is not null and matricule_cpt = cur_cpt.matricule_cpt;
+				-- Il n'a pas de compteur actif
+				if(rec_cpt_a_inserer is null)then
+				-- null poids_impulsion puisqu'il n'y a pas de poids d'implusion rattaché à un comteur inactif
+					select matricule_cpt, nb_de_roue_compteur, null poids_impulsion, technologie_compteur, calibre into rec_cpt_a_inserer
+					from compteur where matricule_cpt = cur_cpt.matricule_cpt order by calibre desc limit 1; -- On prend le premier plus grand calibre
+				end if;						
+			else
+				-- On n'a pas de doublons de matricule
+				select matricule_cpt, nb_de_roue_compteur, poids_impulsion, technologie_compteur, calibre into rec_cpt_a_inserer
+				from compteur where matricule_cpt = cur_cpt.matricule_cpt;
+			end if;
+			
+			-- On a à présent la ligne à inserer quelque soit l'éventualité rencontrée
+			insert into ceti_compteur(cab, nombre_de_roue, poids_impulsion, technologie, calibre)
+			values(rec_cpt_a_inserer.matricule_cpt, rec_cpt_a_inserer.nb_de_roue_compteur, rec_cpt_a_inserer.technologie_compteur, rec_cpt_a_inserer.calibre);
+		end loop;
+		close cur_cpt;
+	end;
+				

@@ -1,0 +1,89 @@
+CREATE TABLE IF NOT EXISTS public.pce
+(
+    identifiant character varying(8) COLLATE pg_catalog."default" NOT NULL,
+    etat character varying(1) COLLATE pg_catalog."default",
+    reference_creation character varying(40) COLLATE pg_catalog."default",
+    nom_poste character varying(100) COLLATE pg_catalog."default",
+    numero_voie character varying(20) COLLATE pg_catalog."default",
+    nom_voie character varying(200) COLLATE pg_catalog."default",
+    code_postal character varying(5) COLLATE pg_catalog."default",
+    commune character varying(5) COLLATE pg_catalog."default",
+    coordonnee_x double precision,
+    coordonnee_y double precision,
+    normadresse text COLLATE pg_catalog."default",
+    emplacement_local character varying(255) COLLATE pg_catalog."default",
+    code_acces character varying(255) COLLATE pg_catalog."default",
+    commentaire_local character varying(255) COLLATE pg_catalog."default",
+    nombre_lignes_poste character varying(255) COLLATE pg_catalog."default",
+    zone_gaz character varying(5) COLLATE pg_catalog."default",
+    pidd SMALLINT,
+    type_comptage character varying(5) COLLATE pg_catalog."default",
+    frequence_releve character varying(2) COLLATE pg_catalog."default",
+    altitude integer,
+    reseau_distribution character varying(3) COLLATE pg_catalog."default",
+    pression_amont double precision,
+    pression_livraison double precision,
+    car double precision,
+    station_meteo character varying(8) COLLATE pg_catalog."default",
+    profil character varying(4) COLLATE pg_catalog."default",
+	numero_rue character varying(255) COLLATE pg_catalog."default",
+	type_de_voie character varying(255) COLLATE pg_catalog."default",
+	article_libelle_voie character varying(255) COLLATE pg_catalog."default",
+	nom_de_la_voie character varying(255) COLLATE pg_catalog."default",
+	cp_pds character varying(20) COLLATE pg_catalog."default",
+	score_apn numeric,
+    CONSTRAINT pce_pkey PRIMARY KEY (identifiant)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.pce
+    OWNER to postgres;
+
+
+
+-- alter table event_table_type(4_5) alter date_fin_ch type character varying(30)
+-- alter table event_table_type(4_5) alter id_pce type character varying(50)
+-- alter table event_table_type(4_5) rename pce to id_pce
+
+	
+	
+
+-- initialisation de la table avec des champs séparés à partir des données brutes extraites du fichier JSON
+insert into event_table_type_4_5(id_pce, type_evenement,date_creation,date_application,commentaire,date_debut_ch,date_fin_ch,id_user) 
+SELECT  data->'pce'->'$id'->>'$oid' as id_pce, 
+		case when (data @> '{"typeEvent":4}') then 'COMMENT' else data->>'isDefinitive' end as type_evenement 
+	, data->'created_at'->>'$date' as date_creation 
+	, data->'created_at'->>'$date' as date_application
+	, regexp_replace(data->>'commentaire', E'[\\t]+', ' ', 'g' ) as actualite 
+	,data->'changeRhythmStartedDate'->>'$date' as date_debut_ch 
+	,data->'changeRhythmEndedDate'->>'$date' as date_fin_ch
+	,data->'gestionnaire'->'$id'->>'$oid' as id_user
+FROM public.event_json
+where  data @> '{"typeEvent":4}' or data @> '{"typeEvent":5}'
+
+-- initialisation de la table avec des champs séparés à partir des données brutes extraites du fichier JSON
+insert into user_table(oid_user, username) 
+SELECT  data->'_id'->>'$oid' as oid_user, 
+		data->>'username' as username
+FROM public.user_json
+
+
+-- initialisation de la table avec des champs séparés à partir des données brutes extraites du fichier JSON
+insert into pce_table(oid, matricule, commune)
+select data->'_id'->>'$oid', data->>'matricule'
+	, data->>'commune'
+from pce_json;
+
+
+-- Projection des données du fichier  FE_INIT_VALMENS_CETI_CHRYTHME
+select Identifiant, pc.Matricule, e.type_evenement, 'A' as etat, TO_TIMESTAMP(e.date_creation, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as date_creation
+   , TO_TIMESTAMP(e.date_application, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as date_application 
+	,1 as Annulable, 0 as Rejouable
+   ,commentaire as actualite, u.username as GAIA
+   ,date_debut_ch 
+   ,date_fin_ch 
+from event_table_type_4_5 e 
+		 join user_table u on e.id_user=u.oid
+		 join pce_table pc on e.id_pce=pc.oid
+ 
